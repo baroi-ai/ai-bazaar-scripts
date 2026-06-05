@@ -37,20 +37,25 @@ def install_app():
     print(json.dumps({"status": "progress", "message": "Installation complete!"}))
 
 def run_app():
-    # 1. FIXED: Point to the correct Flask file
     backend_script = os.path.join(APP_DIR, "app.py") 
     
     print(json.dumps({"status": "success", "message": "Reclip is running on http://localhost:8899"}))
     
-    # 2. FIXED: Use Popen to launch the server in the background (detached process)
-    # This allows the script to finish and the UI to update, while the server stays alive!
     kwargs = {}
     if os.name == 'nt':
         kwargs.update(creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
     else:
         kwargs.update(start_new_session=True)
 
-    subprocess.Popen([sys.executable, backend_script], cwd=APP_DIR, **kwargs)
+    # FIXED: We route stdout and stderr to DEVNULL so the Flask server stops talking to the UI.
+    # This allows the script to finish and trigger the green "Success" UI!
+    subprocess.Popen(
+        [sys.executable, backend_script], 
+        cwd=APP_DIR, 
+        stdout=subprocess.DEVNULL, 
+        stderr=subprocess.DEVNULL, 
+        **kwargs
+    )
 
 def main():
     if not os.path.exists(APP_DIR):
