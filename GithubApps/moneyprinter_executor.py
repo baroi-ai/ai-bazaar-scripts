@@ -38,7 +38,7 @@ def install_app():
 
     print(json.dumps({"status": "progress", "message": "UV: Compiling virtual environment freeze locks..."}))
     
-    # FIXED: Clear VIRTUAL_ENV during install so uv uses the project's .venv
+    # Clean VIRTUAL_ENV during install
     install_env = os.environ.copy()
     install_env.pop("VIRTUAL_ENV", None)
     
@@ -71,13 +71,14 @@ def run_app(dynamic_port):
     log_file_path = os.path.join(APP_DIR, "crash.log")
     log_file = open(log_file_path, "w")
 
-    # FIXED: Clean the environment to stop sandbox-inception and force Streamlit headless mode
+    # THIS IS THE CRITICAL FIX THAT WAS MISSING
+    # It forces Streamlit into headless mode and stops the environment inheritance
     app_env = os.environ.copy()
     app_env.pop("VIRTUAL_ENV", None)
     app_env["STREAMLIT_SERVER_HEADLESS"] = "true"
     app_env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
 
-    # FIXED: Added stdin=subprocess.DEVNULL to automatically kill any interactive terminal prompts
+    # Notice stdin=subprocess.DEVNULL and env=app_env below!
     process = subprocess.Popen(
         [
             LOCAL_UV_PATH, "run", "streamlit", "run", "./webui/Main.py", 
