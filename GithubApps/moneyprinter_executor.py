@@ -38,7 +38,17 @@ def install_app():
 
     print(json.dumps({"status": "progress", "message": "UV: Compiling virtual environment freeze locks..."}))
     
-    subprocess.run([LOCAL_UV_PATH, "sync", "--frozen"], cwd=APP_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # FIXED: Clear VIRTUAL_ENV during install so uv uses the project's .venv
+    install_env = os.environ.copy()
+    install_env.pop("VIRTUAL_ENV", None)
+    
+    subprocess.run(
+        [LOCAL_UV_PATH, "sync", "--frozen"], 
+        cwd=APP_DIR, 
+        stdout=subprocess.DEVNULL, 
+        stderr=subprocess.DEVNULL,
+        env=install_env
+    )
     
     print(json.dumps({"status": "progress", "message": "Installation complete!"}))
 
@@ -58,21 +68,27 @@ def run_app(dynamic_port):
         except Exception:
             pass
 
-    # DEBUG UPGRADE: Create a physical crash log file inside MoneyPrinterTurbo directory
     log_file_path = os.path.join(APP_DIR, "crash.log")
     log_file = open(log_file_path, "w")
 
-    # Pass the opened file descriptor to stdout and stderr so we track the crash stacktrace
+    # FIXED: Clean the environment to stop sandbox-inception and force Streamlit headless mode
+    app_env = os.environ.copy()
+    app_env.pop("VIRTUAL_ENV", None)
+    app_env["STREAMLIT_SERVER_HEADLESS"] = "true"
+    app_env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+
+    # FIXED: Added stdin=subprocess.DEVNULL to automatically kill any interactive terminal prompts
     process = subprocess.Popen(
         [
             LOCAL_UV_PATH, "run", "streamlit", "run", "./webui/Main.py", 
             "--server.port", str(dynamic_port),
-            "--server.address", "127.0.0.1",
-            "--browser.gatherUsageStats=False"
+            "--server.address", "127.0.0.1"
         ], 
         cwd=APP_DIR, 
         stdout=log_file, 
         stderr=log_file, 
+        stdin=subprocess.DEVNULL, 
+        env=app_env,
         **kwargs
     )
     
