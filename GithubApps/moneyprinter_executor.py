@@ -14,7 +14,6 @@ import json
 GITHUB_ZIP_URL = "https://github.com/harry0703/MoneyPrinterTurbo/archive/refs/heads/main.zip"
 APP_DIR = os.path.join(os.getcwd(), "installed_apps", "MoneyPrinterTurbo")
 
-# FIXED: Locate the local 'uv' binary in the daemon's root directory
 UV_BINARY_NAME = "uv.exe" if os.name == 'nt' else "uv"
 LOCAL_UV_PATH = os.path.join(os.getcwd(), UV_BINARY_NAME)
 
@@ -39,7 +38,6 @@ def install_app():
 
     print(json.dumps({"status": "progress", "message": "UV: Compiling virtual environment freeze locks..."}))
     
-    # FIXED: Use the exact local path to the uv binary
     subprocess.run([LOCAL_UV_PATH, "sync", "--frozen"], cwd=APP_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     print(json.dumps({"status": "progress", "message": "Installation complete!"}))
@@ -60,7 +58,11 @@ def run_app(dynamic_port):
         except Exception:
             pass
 
-    # FIXED: Use the local uv binary path to kick off the background Streamlit server
+    # DEBUG UPGRADE: Create a physical crash log file inside MoneyPrinterTurbo directory
+    log_file_path = os.path.join(APP_DIR, "crash.log")
+    log_file = open(log_file_path, "w")
+
+    # Pass the opened file descriptor to stdout and stderr so we track the crash stacktrace
     process = subprocess.Popen(
         [
             LOCAL_UV_PATH, "run", "streamlit", "run", "./webui/Main.py", 
@@ -69,8 +71,8 @@ def run_app(dynamic_port):
             "--browser.gatherUsageStats=False"
         ], 
         cwd=APP_DIR, 
-        stdout=subprocess.DEVNULL, 
-        stderr=subprocess.DEVNULL, 
+        stdout=log_file, 
+        stderr=log_file, 
         **kwargs
     )
     
