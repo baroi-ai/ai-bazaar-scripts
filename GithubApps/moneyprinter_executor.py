@@ -17,16 +17,35 @@ APP_DIR = os.path.join(os.getcwd(), "installed_apps", "MoneyPrinterTurbo")
 UV_BINARY_NAME = "uv.exe" if os.name == 'nt' else "uv"
 LOCAL_UV_PATH = os.path.join(os.getcwd(), UV_BINARY_NAME)
 
+# Global variable to track progress and prevent log spamming
+last_percent = -1
+
+def download_progress_hook(count, block_size, total_size):
+    global last_percent
+    if total_size > 0:
+        percent = int((count * block_size * 100) / total_size)
+        
+        # Only send a log every 10% so we don't flood the React frontend
+        if percent % 10 == 0 and percent != last_percent:
+            print(json.dumps({"status": "progress", "message": f"Downloading... {percent}% complete"}))
+            sys.stdout.flush() # CRITICAL: Forces Python to send the log immediately to Node
+            last_percent = percent
+
 def install_app():
     if not os.path.exists("installed_apps"):
         os.makedirs("installed_apps")
 
     zip_path = os.path.join(os.getcwd(), "moneyprinter_temp.zip")
     
-    print(json.dumps({"status": "progress", "message": "Downloading MoneyPrinterTurbo from GitHub..."}))
-    urllib.request.urlretrieve(GITHUB_ZIP_URL, zip_path)
+    print(json.dumps({"status": "progress", "message": "Connecting to GitHub repository..."}))
+    sys.stdout.flush()
     
-    print(json.dumps({"status": "progress", "message": "Extracting application package..."}))
+    # Pass our progress hook into urlretrieve
+    urllib.request.urlretrieve(GITHUB_ZIP_URL, zip_path, reporthook=download_progress_hook)
+    
+    print(json.dumps({"status": "progress", "message": "Download finished. Extracting application package..."}))
+    sys.stdout.flush()
+    
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall("installed_apps")
     
@@ -36,7 +55,8 @@ def install_app():
         
     os.remove(zip_path)
 
-    print(json.dumps({"status": "progress", "message": "UV: Compiling virtual environment freeze locks..."}))
+    print(json.dumps({"status": "progress", "message": "UV: Compiling virtual environment freeze locks (this may take a moment)..."}))
+    sys.stdout.flush()
     
     # Clean VIRTUAL_ENV during install
     install_env = os.environ.copy()
@@ -51,6 +71,7 @@ def install_app():
     )
     
     print(json.dumps({"status": "progress", "message": "Installation complete!"}))
+    sys.stdout.flush()
 
 def run_app(dynamic_port):
     kwargs = {}
@@ -99,12 +120,17 @@ def run_app(dynamic_port):
         "port": dynamic_port,
         "pid": process.pid
     }))
+    sys.stdout.flush()
 
 def main():
     target_port = sys.argv[3] if len(sys.argv) > 3 else "8501"
     
     if not os.path.exists(APP_DIR):
         install_app()
+    else:
+        print(json.dumps({"status": "progress", "message": "App already installed. Booting from local storage..."}))
+        sys.stdout.flush()
+        
     run_app(target_port)
 
 if __name__ == "__main__":
