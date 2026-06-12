@@ -12,6 +12,7 @@ import urllib.request
 import zipfile
 import subprocess
 import json
+import traceback
 
 GITHUB_ZIP_URL = "https://github.com/averygan/reclip/archive/refs/heads/main.zip"
 APP_DIR = os.path.join(os.getcwd(), "installed_apps", "reclip")
@@ -50,7 +51,9 @@ def install_app():
     if os.path.exists(extracted_folder):
         os.rename(extracted_folder, APP_DIR)
         
-    os.remove(zip_path)
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+        
     print(json.dumps({"status": "progress", "message": "Installation and extraction complete!"}))
     sys.stdout.flush()
 
@@ -61,12 +64,16 @@ def run_app(dynamic_port):
     else:
         kwargs.update(start_new_session=True)
 
+    # Create the log file inside the Reclip folder
+    log_file_path = os.path.join(APP_DIR, "crash.log")
+    log_file = open(log_file_path, "w")
+
     # We use the Flask CLI to force Reclip onto the dynamic port provided by your Daemon
     process = subprocess.Popen(
         [sys.executable, "-m", "flask", "--app", "app.py", "run", "--port", str(dynamic_port)], 
         cwd=APP_DIR, 
-        stdout=subprocess.DEVNULL, 
-        stderr=subprocess.DEVNULL, 
+        stdout=log_file,  # Routes standard output to crash.log
+        stderr=log_file,  # Routes errors and tracebacks to crash.log
         **kwargs
     )
     
@@ -83,13 +90,23 @@ def main():
     # The Daemon will pass the open port as the 3rd argument
     target_port = sys.argv[3] if len(sys.argv) > 3 else "8899"
     
-    if not os.path.exists(APP_DIR):
-        install_app()
-    else:
-        print(json.dumps({"status": "progress", "message": "App already installed. Booting from local storage..."}))
-        sys.stdout.flush()
+    try:
+        if not os.path.exists(APP_DIR):
+            install_app()
+        else:
+            print(json.dumps({"status": "progress", "message": "App already installed. Booting from local storage..."}))
+            sys.stdout.flush()
+            
+        run_app(target_port)
         
-    run_app(target_port)
+    except Exception as e:
+        # Catch installation failures (e.g. no internet, permission denied)
+        error_log_path = os.path.join(os.getcwd(), "reclip_setup_crash.log")
+        with open(error_log_path, "w") as f:
+            f.write(traceback.format_exc())
+            
+        print(json.dumps({"status": "error", "message": f"Critical Failure: {str(e)}"}))
+        sys.stdout.flush()
 
 if __name__ == "__main__":
     main()
