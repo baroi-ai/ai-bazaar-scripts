@@ -16,14 +16,33 @@ import json
 GITHUB_ZIP_URL = "https://github.com/averygan/reclip/archive/refs/heads/main.zip"
 APP_DIR = os.path.join(os.getcwd(), "installed_apps", "reclip")
 
+# Global variable to track progress and prevent log spamming
+last_percent = -1
+
+def download_progress_hook(count, block_size, total_size):
+    global last_percent
+    if total_size > 0:
+        percent = int((count * block_size * 100) / total_size)
+        
+        # Only send a log every 10% so we don't flood the React frontend
+        if percent % 10 == 0 and percent != last_percent:
+            print(json.dumps({"status": "progress", "message": f"Downloading... {percent}% complete"}))
+            sys.stdout.flush() # CRITICAL: Forces Python to send the log immediately to Node
+            last_percent = percent
+
 def install_app():
     if not os.path.exists("installed_apps"): os.makedirs("installed_apps")
     zip_path = os.path.join(os.getcwd(), "reclip_temp.zip")
     
-    print(json.dumps({"status": "progress", "message": "Downloading Reclip from GitHub..."}))
-    urllib.request.urlretrieve(GITHUB_ZIP_URL, zip_path)
+    print(json.dumps({"status": "progress", "message": "Connecting to GitHub repository..."}))
+    sys.stdout.flush()
     
-    print(json.dumps({"status": "progress", "message": "Extracting files..."}))
+    # Pass our progress hook into urlretrieve
+    urllib.request.urlretrieve(GITHUB_ZIP_URL, zip_path, reporthook=download_progress_hook)
+    
+    print(json.dumps({"status": "progress", "message": "Download finished. Extracting files..."}))
+    sys.stdout.flush()
+    
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall("installed_apps")
     
@@ -32,7 +51,8 @@ def install_app():
         os.rename(extracted_folder, APP_DIR)
         
     os.remove(zip_path)
-    print(json.dumps({"status": "progress", "message": "Installation complete!"}))
+    print(json.dumps({"status": "progress", "message": "Installation and extraction complete!"}))
+    sys.stdout.flush()
 
 def run_app(dynamic_port):
     kwargs = {}
@@ -53,10 +73,11 @@ def run_app(dynamic_port):
     # Send the final dynamic port and the exact background PID back to the Node daemon
     print(json.dumps({
         "status": "success", 
-        "message": f"Reclip is running on http://localhost:{dynamic_port}",
+        "message": f"Reclip is online and ready.",
         "port": dynamic_port,
         "pid": process.pid
     }))
+    sys.stdout.flush()
 
 def main():
     # The Daemon will pass the open port as the 3rd argument
@@ -64,6 +85,10 @@ def main():
     
     if not os.path.exists(APP_DIR):
         install_app()
+    else:
+        print(json.dumps({"status": "progress", "message": "App already installed. Booting from local storage..."}))
+        sys.stdout.flush()
+        
     run_app(target_port)
 
 if __name__ == "__main__":
